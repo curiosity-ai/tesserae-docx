@@ -1,0 +1,63 @@
+{
+    "outputFormatting": "Both",
+    "resources": [
+        {
+            "name": "Tesserae.DocxEditor.js",
+            "files": [
+                "$(OutDir)h5/Tesserae.DocxEditor.js"
+            ]
+        },
+        {
+            "name": "Tesserae.DocxEditor.meta.js",
+            "files": [
+                "$(OutDir)h5/Tesserae.DocxEditor.meta.js"
+            ]
+        },
+        {
+            "name": "Tesserae.DocxEditor.min.js",
+            "files": [
+                "$(OutDir)h5/Tesserae.DocxEditor.min.js"
+            ]
+        },
+        {
+            "name": "Tesserae.DocxEditor.meta.min.js",
+            "files": [
+                "$(OutDir)h5/Tesserae.DocxEditor.meta.min.js"
+            ]
+        },
+        {
+            "name": "docx-editor.js",
+            "files": [
+                "assets/js/docx-editor.js"
+            ],
+            "output": "assets/js"
+        },
+        {
+            "name": "docx-editor.min.js",
+            "files": [
+                "assets/js/docx-editor.min.js"
+            ],
+            "output": "assets/js"
+        }
+    ],
+    "cleanOutputFolderBeforeBuildPattern": "*.*",
+    "loader": {
+        "type": "Global"
+    },
+    "generateTypeScript": false,
+    "generateDocumentation": "None",
+    "rules": {
+        "anonymousType": "Plain",
+        "arrayIndex": "Managed",
+        "autoProperty": "Plain",
+        "boxing": "Managed",
+        "externalCast": "Plain",
+        "inlineComment": "Plain",
+        "integer": "Managed",
+        "lambda": "Plain",
+        "useShortForms": true
+    },
+    "sourceMap": {
+        "enabled": false
+    }
+}

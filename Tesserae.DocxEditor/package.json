@@ -1,0 +1,13 @@
+{
+  "name": "docx-editor-ui-bundle",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Build tooling that bundles @eigenpal/docx-editor-core into a browser-global JS file embedded by the Tesserae.DocxEditor wrapper.",
+  "scripts": {
+    "bundle": "node build/bundle.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
