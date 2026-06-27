@@ -1,180 +1,121 @@
-> 📦 Archive — not maintained. A preserved copy of Eigenpal's @eigenpal/docx-editor, captured after the project went dark in June 2026 (both the repo and docx-editor.dev went offline). Forked from sorenlouv/docx-editor — the most recent surviving fork I could find of the original. The package versions here are v1.9.0, matching the last release still published on npm (@eigenpal/docx-editor-core / -react / -agents / -i18n). Apache-2.0 licensed as per original repo. Kept read-only for archival/reference; nothing is changed here.
+# Tesserae.DocxEditor
 
----
+**Tesserae.DocxEditor** is a [Tesserae](https://github.com/curiosity-ai/tesserae) (H5 C#-to-JavaScript) library for **editing `.docx` documents from C#** — a fully interactive WYSIWYG editor and a headless document API, with no hand-written JavaScript and **no JavaScript UI framework** (no React, no Vue).
 
-<p align="center">
-  <a href="https://www.docx-editor.dev/">
-    <img src="./.github/assets/header.png" alt="DOCX Editor — .docx in, .docx out. Open source, agent ready, client-side." width="500" />
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://www.npmjs.com/package/@eigenpal/docx-editor-core"><img src="https://img.shields.io/npm/v/@eigenpal/docx-editor-core.svg?style=flat-square&color=3B5BDB" alt="npm version" /></a>
-  <a href="https://www.npmjs.com/package/@eigenpal/docx-js-editor"><img src="https://img.shields.io/npm/dm/@eigenpal/docx-js-editor.svg?style=flat-square&color=3B5BDB" alt="npm downloads" /></a>
-  <a href="https://github.com/eigenpal/docx-editor/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg?style=flat-square&color=3B5BDB" alt="license" /></a>
-  <a href="https://docx-editor.dev/editor"><img src="https://img.shields.io/badge/Live_Demo-3B5BDB?style=flat-square&logo=vercel&logoColor=white" alt="Demo" /></a>
-  <a href="https://www.docx-editor.dev/docs"><img src="https://img.shields.io/badge/Docs-3B5BDB?style=flat-square&logo=readthedocs&logoColor=white" alt="Documentation" /></a>
-</p>
-
-Open-source WYSIWYG `.docx` editor for React and Vue with canonical OOXML, tracked changes, and real-time collaboration. Agent-ready. **[Live demo](https://docx-editor.dev/editor)** | **[Documentation](https://www.docx-editor.dev/docs)**
-
-## Quick Start
+It is a thin C# wrapper around the framework-agnostic core of the [docx-editor](https://github.com/theolivenbaum/docx-editor) library (originally [eigenpal/docx-editor](https://github.com/eigenpal/docx-editor), Apache-2.0). That core — the OOXML parser/serializer, the ProseMirror editing engine, and the formatting commands — is bundled into this package as a browser-global script (`window.docxeditor`) and embedded through `h5.json`, so there is **no preload step**: referencing the NuGet package is enough.
 
 ```bash
-npm install @eigenpal/docx-editor-react
+dotnet add package Tesserae.DocxEditor
 ```
 
-See the [React quick start](#react) below.
+## Two faces
 
-```bash
-npm install @eigenpal/docx-editor-vue
+| | Type | What it is |
+| --- | --- | --- |
+| **Visual** | `DocxEditor` | A WYSIWYG editor as a Tesserae `IComponent`, with a toolbar built entirely from Tesserae components. Open a `.docx`, edit it, save it back — round-tripping the real document model (fonts, theme colors, styles, tables, …). |
+| **Headless** | `DocxDocument` | A programmatic API (wrapping the core's `DocumentAgent`) for reading, editing, templating and saving documents with no UI. |
+
+Both are reached through the static `DOCX` factory, mirroring Tesserae's own `UI` entry point.
+
+## The visual editor
+
+```csharp
+using Tesserae.DocxEditor;
+using static Tesserae.UI;
+
+var editor = DOCX.Editor()
+    .WithText("Type here, use the toolbar, then download as .docx.")
+    .OnChange(() => Console.WriteLine("document changed"));
+
+document.body.appendChild(
+    Stack().S().Children(
+        HStack().Children(
+            Button("Open .docx…").OnClick(OpenFile),
+            Button("Download").OnClick(() => editor.Download("my.docx"))
+        ),
+        editor.Grow()
+    ).Render()
+);
 ```
 
-See the [Vue quick start](#vue) below.
+`DocxEditor` is a regular `IComponent`, so the usual Tesserae sizing helpers (`.W()`, `.H()`, `.WS()`, `.HS()`, `.S()`, `.Grow()`, …) all apply. The built-in toolbar (bold/italic/underline, alignment, lists, a paragraph-style dropdown, table insert, page break, undo/redo and a live word count) is composed from Tesserae `Button`/`Dropdown`/`Stack` components and reflects the current selection's formatting. Pass `NoToolbar()` to supply your own.
 
-```bash
-npm install @eigenpal/nuxt-docx-editor
-```
+### `DocxEditor` API
 
-See the [Nuxt quick start](#nuxt) below.
+| Area | Methods |
+| --- | --- |
+| Setup | `WithText(text)`, `WithDocx(arrayBuffer)`, `ReadOnly(bool)`, `NoToolbar()`, `OnChange(handler)`, `OnReady(handler)` |
+| Documents | `Load(arrayBuffer, onLoaded?)`, `NewDocument(text?)`, `Save(onSaved)`, `Download(filename)`, `GetText()`, `GetWordCount()` |
+| Marks | `ToggleBold`, `ToggleItalic`, `ToggleUnderline`, `ToggleStrikethrough`, `SetTextColor(rgbHex)`, `SetHighlight(color)`, `SetFontSize(pt)`, `SetFontFamily(name)` |
+| Paragraph | `SetAlignment("left"\|"center"\|"right"\|"justify")`, `ApplyStyle(styleId)`, `ToggleBulletList`, `ToggleNumberedList`, `IncreaseIndent`, `DecreaseIndent` |
+| Insert | `InsertTable(rows, cols)`, `InsertPageBreak()` |
+| History | `Undo()`, `Redo()` |
+| Escape hatch | `Controller` — the raw `DocxEditorController` JS instance |
 
-<p align="center">
-  <a href="https://docx-editor.dev/editor">
-    <img src="./.github/assets/editor.png" alt="docx-editor screenshot" width="100%" />
-  </a>
-</p>
+## The headless API
 
-## Packages
+```csharp
+var doc = DOCX.NewDocument("Invoice for {customer}, total {amount}.");
+Console.WriteLine(doc.GetWordCount());                    // 4
+Console.WriteLine(string.Join(", ", doc.GetVariables())); // amount, customer
 
-| Package                                                                                      | Description                                                                                                                                | Docs                                                  |
-| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| [`@eigenpal/docx-editor-react`](https://www.npmjs.com/package/@eigenpal/docx-editor-react)   | <img src="https://cdn.simpleicons.org/react/61DAFB" width="20" align="middle" /> &nbsp; React adapter. Toolbar, paged editor, plugins.     | [Docs](https://www.docx-editor.dev/docs/1.x/react)    |
-| [`@eigenpal/docx-editor-vue`](https://www.npmjs.com/package/@eigenpal/docx-editor-vue)       | <img src="https://cdn.simpleicons.org/vuedotjs/4FC08D" width="20" align="middle" /> &nbsp; Vue 3 adapter. Toolbar, paged editor, plugins.  | [Docs](https://www.docx-editor.dev/docs/1.x/vue)      |
-| [`@eigenpal/nuxt-docx-editor`](https://www.npmjs.com/package/@eigenpal/nuxt-docx-editor)     | <img src="https://cdn.simpleicons.org/nuxt/00DC82" width="20" align="middle" /> &nbsp; Nuxt 3 & 4 module wrapping the Vue adapter.         | [Docs](https://www.docx-editor.dev/docs/1.x/vue/nuxt) |
-| [`@eigenpal/docx-editor-core`](https://www.npmjs.com/package/@eigenpal/docx-editor-core)     | Framework-agnostic core: OOXML parser, serializer, layout engine, ProseMirror schema. Depend on this if you fork the React or Vue adapter. | [Docs](https://www.docx-editor.dev/docs/1.x/core)     |
-| [`@eigenpal/docx-editor-i18n`](https://www.npmjs.com/package/@eigenpal/docx-editor-i18n)     | Shared locale strings and types consumed by both adapters.                                                                                 | [Docs](https://www.docx-editor.dev/docs/1.x/i18n)     |
-| [`@eigenpal/docx-editor-agents`](https://www.npmjs.com/package/@eigenpal/docx-editor-agents) | Agent SDK and chat UI: framework-agnostic bridge, MCP server, AI SDK adapters, plus UI components.                                         | [Docs](https://www.docx-editor.dev/docs/1.x/agents)   |
+doc.InsertText(0, 0, "DRAFT — ").ApplyStyle(0, "Heading1");
+doc.Download("invoice.docx");
 
-> **Forking the adapter?** Keep your fork thin. Depend on `@eigenpal/docx-editor-core` directly so parser, serializer, and rendering fixes land in your build automatically, without backporting each upstream change by hand.
-
-## React
-
-```tsx
-import { useState } from 'react';
-import { DocxEditor } from '@eigenpal/docx-editor-react';
-import '@eigenpal/docx-editor-react/styles.css';
-
-export function App() {
-  const [buffer, setBuffer] = useState<ArrayBuffer | null>(null);
-
-  return (
-    <>
-      <input
-        type="file"
-        accept=".docx"
-        onChange={async (e) => setBuffer((await e.target.files?.[0]?.arrayBuffer()) ?? null)}
-      />
-      {buffer && <DocxEditor documentBuffer={buffer} mode="editing" />}
-    </>
-  );
-}
-```
-
-> **Next.js / SSR:** Use dynamic import. The editor requires the DOM.
-
-Full docs: [`packages/react`](packages/react) · [API reference](https://www.docx-editor.dev/docs/props).
-
-## Vue
-
-```vue
-<script setup lang="ts">
-import { ref } from 'vue';
-import { DocxEditor } from '@eigenpal/docx-editor-vue';
-import '@eigenpal/docx-editor-vue/styles.css';
-
-const buffer = ref<ArrayBuffer | null>(null);
-
-async function loadFile(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0];
-  buffer.value = file ? await file.arrayBuffer() : null;
-}
-</script>
-
-<template>
-  <input type="file" accept=".docx" @change="loadFile" />
-  <DocxEditor v-if="buffer" :document-buffer="buffer" mode="editing" />
-</template>
-```
-
-Full docs: [`packages/vue`](packages/vue) · [API reference](https://www.docx-editor.dev/docs/props).
-
-## Nuxt
-
-```ts
-// nuxt.config.ts
-export default defineNuxtConfig({
-  modules: ['@eigenpal/nuxt-docx-editor'],
+// Load + template-fill an existing .docx (needs the original file bytes):
+var loaded = await DOCX.LoadAsync(arrayBuffer);
+var filled = await loaded.ApplyVariablesAsync(new Dictionary<string, string> {
+    { "customer", "Jane Doe" }, { "amount", "$1,200" },
 });
+var bytes = await filled.ToBytesAsync();
 ```
 
-`@eigenpal/nuxt-docx-editor` wraps the Vue adapter as a Nuxt 3 & 4 module: it auto-imports an SSR-safe `<DocxEditor>` component (no manual import, no `<ClientOnly>` wrapper) and the Vue composables.
+The underlying agent is immutable: each editing method swaps in the new agent it returns and yields `this`, so calls chain naturally from C#.
 
-Full docs: [`packages/nuxt`](packages/nuxt).
+### `DocxDocument` API
 
-## Plugins
+| Area | Methods |
+| --- | --- |
+| Construction | `DOCX.NewDocument(text?)`, `DOCX.LoadAsync(arrayBuffer)` |
+| Reading | `GetText()`, `GetWordCount()`, `GetCharacterCount(includeSpaces?)`, `GetParagraphCount()`, `GetTableCount()`, `GetVariables()`, `GetTemplateTags()` |
+| Editing | `InsertText(paragraphIndex, offset, text)`, `ApplyStyle(paragraphIndex, styleId)`, `InsertTable(paragraphIndex, offset, rows, cols)` |
+| Templates | `SetVariable(name, value)`, `ApplyVariablesAsync(variables?)` |
+| Export | `ToBytesAsync()`, `Download(filename)` |
+| Escape hatch | `Agent` — the raw `DocumentAgent` JS instance |
 
-```tsx
-import { DocxEditor } from '@eigenpal/docx-editor-react';
-import { PluginHost, templatePlugin } from '@eigenpal/docx-editor-react/plugin-api';
+## Sample app
 
-<PluginHost plugins={[templatePlugin]}>
-  <DocxEditor documentBuffer={buffer} />
-</PluginHost>;
-```
+[`Tesserae.DocxEditor.Sample`](Tesserae.DocxEditor.Sample) is a runnable Tesserae app demonstrating both faces: a live WYSIWYG editor with a Tesserae toolbar, file open/save/download, a read-only toggle, and a small headless `DocxDocument` showcase.
 
-See the [plugin documentation](https://www.docx-editor.dev/docs/plugins) for the full plugin API.
+## How the JavaScript is embedded
 
-## Development
+`build/bundle.mjs` uses [esbuild](https://esbuild.github.io/) to produce two browser-global IIFE bundles (each as a readable `.js` and a minified `.min.js` — H5 picks the readable one for Debug builds and the minified one for Release):
+
+| File | Global | Contents |
+| --- | --- | --- |
+| `assets/js/docx-editor-deps.js` | `window.docxeditordeps` | the pure-JS document libraries: jszip, pizzip, xml-js, docxtemplater |
+| `assets/js/docx-editor.js` | `window.docxeditor` | the editor engine (ProseMirror) + the docx-editor core + the vanilla `DocxEditorController` (see `Tesserae.DocxEditor/src/js/index.ts`) |
+
+The heavy, rarely-changing third-party libraries live in the **separate** `docx-editor-deps` bundle; the main bundle externalizes them and reads them from the global at runtime, so the docx bundle stays lean and the vendor libs cache independently. `h5.json` lists the deps bundle **before** the main bundle so it loads first. `dompurify` is not bundled — Tesserae already ships it as `window.DOMPurify`, so the docx bundle reuses that single copy. No JavaScript UI framework (React/Vue) is bundled anywhere — only the ProseMirror engine and the pure-JS document libraries.
+
+## Building
 
 ```bash
-bun install
-bun run dev        # localhost:5173
-bun run build
-bun run typecheck
+npm install      # once, from Tesserae.DocxEditor/, to fetch esbuild
+npm run bundle   # regenerate assets/js/docx-editor*.js
+dotnet build     # builds the H5 package (also re-runs the bundle step)
 ```
 
-A live preview of `main` is auto-deployed at **[latest.docx-editor.dev](https://latest.docx-editor.dev/)** — useful for trying out changes before they ship to npm.
+The csproj refreshes both JS bundles before each build via the `BundleDocxEditorJs` MSBuild target, so the embedded JS always matches the current core sources. The step is no-op-safe: if node/npm are unavailable, the previously generated (and committed) bundle under `assets/js/` is used instead.
 
-Examples: [Vite](examples/vite) | [Next.js](examples/nextjs) | [Remix](examples/remix) | [Astro](examples/astro) | [Vue](examples/vue) | [Nuxt](examples/nuxt)
+## Scope note
 
-**[Documentation](https://www.docx-editor.dev/docs)** | **[Props & Ref Methods](https://www.docx-editor.dev/docs/props)** | **[Plugins](https://www.docx-editor.dev/docs/plugins)** | **[Architecture](https://www.docx-editor.dev/docs/architecture)**
+This wrapper renders the editor with ProseMirror's own DOM (a clean, continuous-flow page), reusing the exact DOCX schema, conversions and formatting commands the upstream React/Vue editors use, so documents open and save faithfully. The page-exact paginated *painter* view that those adapters render is driven by framework-specific layout orchestration and is intentionally not part of this pure-JS wrapper.
 
-## Contributing
+## Source library
 
-Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, tests, and the one-time CLA signature.
+The DOCX core, editing engine, and OOXML parser/serializer come from [docx-editor](https://github.com/theolivenbaum/docx-editor) (originally [eigenpal/docx-editor](https://github.com/eigenpal/docx-editor)). Its source — the `packages/core`, `packages/react`, `packages/vue` and related sources retained in this repository — is licensed Apache-2.0. See [LICENSE](LICENSE).
 
-## Translations
+## License
 
-| Locale  | Language             |
-| ------- | -------------------- |
-| `en`    | English              |
-| `de`    | German               |
-| `fr`    | French               |
-| `he`    | Hebrew               |
-| `hi`    | Hindi                |
-| `pl`    | Polish               |
-| `pt-BR` | Portuguese (Brazil)  |
-| `tr`    | Turkish              |
-| `zh-CN` | Chinese (Simplified) |
-
-Help translate the editor into your language! See the full **[i18n contribution guide](docs/i18n.md)**.
-
-```bash
-bun run i18n:new de      # scaffold German locale
-bun run i18n:status      # check translation coverage
-```
-
-## Commercial Support
-
-> [!TIP]
-> Questions or custom features? Email **[docx-editor@eigenpal.com](mailto:docx-editor@eigenpal.com)**.
+The Tesserae.DocxEditor C# wrapper is MIT © Curiosity GmbH. The bundled docx-editor core is Apache-2.0 © its respective authors.
