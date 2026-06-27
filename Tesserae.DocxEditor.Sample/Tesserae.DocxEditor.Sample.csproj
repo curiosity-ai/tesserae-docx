@@ -1,0 +1,20 @@
+<Project Sdk="h5.target/26.3.64912">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <DefineConstants>H5</DefineConstants>
+    <AssemblyName>app</AssemblyName>
+    <RootNamespace>Tesserae.DocxEditor.Sample</RootNamespace>
+    <LangVersion>7.2</LangVersion>
+    <MinifyLocalVariables>true</MinifyLocalVariables>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="h5" Version="26.2.64514" />
+    <PackageReference Include="h5.core" Version="26.4.580" />
+    <PackageReference Include="Tesserae" Version="2026.6.67480" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tesserae.DocxEditor\Tesserae.DocxEditor.csproj" />
+  </ItemGroup>
+</Project>

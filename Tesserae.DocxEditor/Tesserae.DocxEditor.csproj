@@ -1,0 +1,49 @@
+<Project Sdk="h5.target/26.3.64912">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <DefineConstants>H5</DefineConstants>
+    <AssemblyName>Tesserae.DocxEditor</AssemblyName>
+    <RootNamespace>Tesserae.DocxEditor</RootNamespace>
+    <LangVersion>7.2</LangVersion>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <DebugType>None</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <SkipResourcesExtraction>true</SkipResourcesExtraction>
+    <MinifyLocalVariables>true</MinifyLocalVariables>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="h5" Version="26.2.64514" />
+    <PackageReference Include="h5.core" Version="26.4.580" />
+    <PackageReference Include="Tesserae" Version="2026.6.67480" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <Copyright>(c) Copyright 2026 Curiosity GmbH - all right reserved</Copyright>
+    <Company>Curiosity GmbH</Company>
+    <Authors>Curiosity GmbH</Authors>
+    <PackageProjectUrl>https://github.com/theolivenbaum/docx-editor</PackageProjectUrl>
+    <PackageId>Tesserae.DocxEditor</PackageId>
+    <Description>Tesserae.DocxEditor is a Tesserae (H5 C# to JavaScript) wrapper around the docx-editor library — a pure-JavaScript (no React/Vue) WYSIWYG DOCX editor plus a headless document-manipulation API.</Description>
+    <PackageTags>h5, HTML, UI, components, docx, word, editor, wysiwyg, document, tesserae</PackageTags>
+    <NoWarn>1701;1702;1591</NoWarn>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!--
+    Bundle the docx-editor core (framework-agnostic) into the browser-global JS files that
+    h5.json embeds as resources. This runs before the H5 build so the embedded JS always matches
+    the current core sources. It is no-op-safe: if node/npm are unavailable the previously
+    generated (and committed) bundle under assets/js/ is used instead.
+  -->
+  <Target Name="BundleDocxEditorJs" BeforeTargets="BeforeBuild">
+    <Exec Command="npm install --no-audit --no-fund" WorkingDirectory="$(MSBuildProjectDirectory)" ContinueOnError="true" />
+    <Exec Command="npm run bundle" WorkingDirectory="$(MSBuildProjectDirectory)" ContinueOnError="true" />
+  </Target>
+</Project>
