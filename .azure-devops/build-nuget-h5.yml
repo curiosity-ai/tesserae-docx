@@ -1,0 +1,106 @@
+variables:
+  buildConfiguration: 'Release'
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - Tesserae.DocxEditor/*
+      - packages/core/*
+      - .azure-devops/build-nuget-h5.yml
+
+pool:
+  vmImage: 'windows-latest'
+
+steps:
+- checkout: self
+  submodules: true
+  persistCredentials: true
+
+- task: PowerShell@2
+  displayName: 'Create CalVer Version'
+  inputs:
+    targetType: 'inline'
+    script: |
+      $dottedDate = (Get-Date).ToString("yy.M")
+      $buildID = $($env:BUILD_BUILDID)
+      $modBuildID = [int]$buildID % 65536  # ensure fits in int16
+      $newTargetVersion = "$dottedDate.$modBuildID"
+      Write-Host "##vso[task.setvariable variable=targetVersion;]$newTargetVersion"
+      Write-Host "Updated targetVersion to '$newTargetVersion'"
+
+- task: UseDotNet@2
+  displayName: 'Use .NET 10.0 sdk'
+  inputs:
+    packageType: sdk
+    version: 10.x
+    installationPath: $(Agent.ToolsDirectory)/dotnet
+
+- task: NodeTool@0
+  displayName: 'Use Node.js 22.x'
+  inputs:
+    versionSpec: '22.x'
+
+- task: NuGetToolInstaller@1
+
+- task: CmdLine@2
+  displayName: 'install h5 compiler'
+  inputs:
+    script: 'dotnet tool update --global h5-compiler'
+
+# Install bun and prepend it to PATH for the following steps. bun is the package
+# manager this repo pins (bun.lock + bunfig.toml's supply-chain minimumReleaseAge),
+# and it is what populates packages/core/node_modules with the prosemirror + document
+# libraries the JS bundle resolves against.
+- task: PowerShell@2
+  displayName: 'install bun'
+  inputs:
+    targetType: 'inline'
+    script: |
+      irm bun.sh/install.ps1 | iex
+      Write-Host "##vso[task.prependpath]$env:USERPROFILE\.bun\bin"
+
+# Populate packages/core/node_modules (the prosemirror + document libs). A single
+# ProseMirror instance is required, so the bundle resolves against this exact copy.
+- task: CmdLine@2
+  displayName: 'install core deps (bun)'
+  inputs:
+    script: 'bun install'
+    workingDirectory: '$(Build.SourcesDirectory)'
+
+# Bundle the docx-editor core into the browser-global JS that the H5 project embeds
+# (also runs as an MSBuild target during the build, but doing it explicitly here makes
+# the produced artifact visible in the build logs). The local npm install pulls esbuild.
+- task: CmdLine@2
+  displayName: 'bundle docx-editor js'
+  inputs:
+    script: |
+      npm install --no-audit --no-fund
+      npm run bundle
+    workingDirectory: '$(Build.SourcesDirectory)/Tesserae.DocxEditor/'
+
+- task: CmdLine@2
+  displayName: 'restore Tesserae.DocxEditor project'
+  inputs:
+    script: 'dotnet restore $(Build.SourcesDirectory)\Tesserae.DocxEditor\Tesserae.DocxEditor.csproj'
+    workingDirectory: '$(Build.SourcesDirectory)/Tesserae.DocxEditor/'
+
+- task: CmdLine@2
+  displayName: 'Build Tesserae.DocxEditor'
+  inputs:
+    script: 'dotnet build $(Build.SourcesDirectory)\Tesserae.DocxEditor\Tesserae.DocxEditor.csproj -c $(buildConfiguration) /p:Version=$(targetVersion)'
+    workingDirectory: '$(Build.SourcesDirectory)/Tesserae.DocxEditor/'
+
+- task: CmdLine@2
+  inputs:
+    script: 'dir $(Build.SourcesDirectory)\Tesserae.DocxEditor\bin\ /S'
+
+- task: NuGetCommand@2
+  displayName: 'push Tesserae.DocxEditor to nuget'
+  inputs:
+    command: 'push'
+    packagesToPush: '**/*/Tesserae.DocxEditor.$(targetVersion).nupkg' # The package name comes from the PackageID, not project name
+    nuGetFeedType: 'external'
+    publishFeedCredentials: 'nuget-curiosity-org'
