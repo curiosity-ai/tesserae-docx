@@ -26,6 +26,20 @@
             ]
         },
         {
+            "name": "docx-editor-deps.js",
+            "files": [
+                "assets/js/docx-editor-deps.js"
+            ],
+            "output": "assets/js"
+        },
+        {
+            "name": "docx-editor-deps.min.js",
+            "files": [
+                "assets/js/docx-editor-deps.min.js"
+            ],
+            "output": "assets/js"
+        },
+        {
             "name": "docx-editor.js",
             "files": [
                 "assets/js/docx-editor.js"

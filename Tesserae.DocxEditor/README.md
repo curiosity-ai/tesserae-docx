@@ -76,15 +76,27 @@ var bytes = await filled.ToBytesAsync();
 
 ## How the JavaScript is embedded
 
-`build/bundle.mjs` uses [esbuild](https://esbuild.github.io/) to bundle the framework-agnostic
-docx-editor core — plus a small vanilla `DocxEditorController` (see `src/js/index.ts`) — into a single
-browser-global IIFE, producing both a readable (`assets/js/docx-editor.js`) and a minified
-(`assets/js/docx-editor.min.js`) artifact that expose `window.docxeditor`. `h5.json` lists both as
-resources; H5 picks the readable one for Debug builds and the minified one for Release builds. The
-csproj refreshes the bundle before each build via the `BundleDocxEditorJs` MSBuild target.
+`build/bundle.mjs` uses [esbuild](https://esbuild.github.io/) to produce two browser-global IIFE
+bundles (each in a readable `.js` and a minified `.min.js` variant — H5 picks the readable one for
+Debug builds and the minified one for Release):
 
-No JavaScript UI framework is bundled — only the ProseMirror editor engine and pure-JS document
-libraries (jszip, pizzip, xml-js, docxtemplater, dompurify).
+| File | Global | Contents |
+|------|--------|----------|
+| `assets/js/docx-editor-deps.js` | `window.docxeditordeps` | the pure-JS document libraries: jszip, pizzip, xml-js, docxtemplater |
+| `assets/js/docx-editor.js`      | `window.docxeditor`     | the editor engine (ProseMirror) + the docx-editor core + the vanilla `DocxEditorController` (see `src/js/index.ts`) |
+
+The heavy, rarely-changing third-party libraries are kept in the **separate** `docx-editor-deps`
+bundle; the main bundle externalizes them and reads them from the global at runtime, so the docx
+bundle itself stays lean and the vendor libs cache independently. `h5.json` lists the deps bundle
+**before** the main bundle so it loads first.
+
+**dompurify is not bundled.** Tesserae already ships it as the global `window.DOMPurify` (used by
+Tesserae's own `SanitizeHTML`/`Markdown` helpers), so the docx bundle reuses that single copy instead
+of shipping a second one. The csproj refreshes both bundles before each build via the
+`BundleDocxEditorJs` MSBuild target.
+
+No JavaScript UI framework (React/Vue) is bundled anywhere — only the ProseMirror editor engine and
+the pure-JS document libraries above.
 
 ## Building
 

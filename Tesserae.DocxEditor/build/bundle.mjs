@@ -1,18 +1,25 @@
 /**
  * Bundles the framework-agnostic docx-editor core (plus a vanilla WYSIWYG editor
- * controller, see ../src/js/index.ts) into a single, self-contained, browser-global
- * JavaScript file that the H5/Tesserae DocxEditor wrapper embeds as a resource.
+ * controller, see ../src/js/index.ts) into browser-global JavaScript files that the
+ * H5/Tesserae DocxEditor wrapper embeds as resources.
  *
- * Two artifacts are produced under Tesserae.DocxEditor/assets/js/:
- *   - docx-editor.js      non-minified IIFE (used by H5 Debug builds)
- *   - docx-editor.min.js  minified IIFE      (used by H5 Release builds)
+ * The third-party document libraries are kept in a SEPARATE vendor bundle so the docx
+ * bundle itself stays lean and the heavy, rarely-changing libs cache independently:
  *
- * Both expose the library on `window.docxeditor` (e.g. `window.docxeditor.DocxEditorController`,
- * `window.docxeditor.DocumentAgent`). H5 picks the ".min.js" variant for Release and the
- * non-".min.js" variant for Debug, so the h5.json references both.
+ *   assets/js/docx-editor-deps.js   jszip + pizzip + xml-js + docxtemplater
+ *                                   -> window.docxeditordeps  (must load first)
+ *   assets/js/docx-editor.js        the editor + headless API
+ *                                   -> window.docxeditor      (references the deps global)
  *
- * No JavaScript UI framework (React/Vue) is bundled — only the ProseMirror editor engine
- * and pure-JS document libraries (jszip, pizzip, xml-js, docxtemplater, dompurify).
+ * (+ a minified ".min.js" of each; H5 picks the readable variant for Debug builds and the
+ * minified one for Release builds.)
+ *
+ * dompurify is NOT bundled: Tesserae already ships it as the global `window.DOMPurify`
+ * (see Tesserae's SanitizeHTML/Markdown helpers + purify.min.js), so the docx bundle reuses
+ * that instead of shipping a second copy.
+ *
+ * No JavaScript UI framework (React/Vue) is bundled anywhere — only the ProseMirror editor
+ * engine and the pure-JS document libraries above.
  *
  * Run with:  npm run bundle   (from the Tesserae.DocxEditor/ folder)
  */
@@ -22,34 +29,95 @@ import { dirname, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const entry = resolve(here, '../src/js/index.ts');
+const depsEntry = resolve(here, 'deps-entry.mjs');
 const outDir = resolve(here, '../assets/js');
-// The editor's peer libs (prosemirror-*) are installed under the core package's
-// node_modules. Point esbuild there so the entry's bare imports resolve to the
-// SAME copy the core sources use — a single ProseMirror instance is required so
-// the schema built by core matches the EditorState we create here.
+// The peer libs (prosemirror-* and the document libs) are installed under the core
+// package's node_modules. Point esbuild there so bare imports resolve to the SAME copy
+// the core sources use — a single ProseMirror instance is required so the schema built by
+// core matches the EditorState we create here.
 const coreNodeModules = resolve(here, '../../packages/core/node_modules');
 
-const banner = {
-  js: '/* docx-editor — bundled for the Tesserae.DocxEditor wrapper. Exposed as window.docxeditor. */',
+// Vendor packages that live in the separate deps bundle (window.docxeditordeps),
+// plus dompurify which is provided by Tesserae's global. In the main bundle these are
+// resolved to tiny shim modules that read from the globals instead of being inlined.
+const DEPS_GLOBAL = 'globalThis.docxeditordeps';
+const shimSource = (path) => {
+  if (path === 'xml-js') {
+    return `const m = ${DEPS_GLOBAL}.xmljs; export const xml2js = m.xml2js; export const js2xml = m.js2xml; export default (m.default || m);`;
+  }
+  if (path === 'dompurify') {
+    // Reuse Tesserae's globally-loaded DOMPurify; fall back to a passthrough so the
+    // bundle still loads in a (non-Tesserae) host that lacks it.
+    return `export default (globalThis.DOMPurify || function(){ return { sanitize: function(h){ return h; }, addHook: function(){}, removeHook: function(){}, setConfig: function(){} }; });`;
+  }
+  const name = { jszip: 'JSZip', pizzip: 'PizZip', docxtemplater: 'Docxtemplater' }[path];
+  return `export default ${DEPS_GLOBAL}.${name};`;
 };
 
-/** @type {import('esbuild').BuildOptions} */
+/** esbuild plugin: resolve the vendor packages to global-reading shims (main bundle only). */
+const vendorGlobalsPlugin = {
+  name: 'vendor-globals',
+  setup(b) {
+    const filter = /^(jszip|pizzip|docxtemplater|xml-js|dompurify)$/;
+    b.onResolve({ filter }, (args) => ({ path: args.path, namespace: 'vendor-shim' }));
+    b.onLoad({ filter: /.*/, namespace: 'vendor-shim' }, (args) => ({
+      contents: shimSource(args.path),
+      loader: 'js',
+    }));
+  },
+};
+
+const banner = {
+  js: '/* docx-editor — bundled for the Tesserae.DocxEditor wrapper. Exposed as window.docxeditor (needs docx-editor-deps.js). */',
+};
+const depsBanner = {
+  js: '/* docx-editor vendor libs (jszip, pizzip, xml-js, docxtemplater) for Tesserae.DocxEditor. Exposed as window.docxeditordeps. */',
+};
+
 const common = {
-  entryPoints: [entry],
   bundle: true,
   format: 'iife',
-  globalName: 'docxeditor',
   target: 'es2020',
-  banner,
   legalComments: 'none',
   logLevel: 'info',
-  // Resolve the entry's bare prosemirror-* imports from the core package's node_modules.
   nodePaths: [coreNodeModules],
-  // The DOCX libs assume a browser; keep them as-is (no node shims needed at runtime).
   define: { 'process.env.NODE_ENV': '"production"' },
 };
 
-await build({ ...common, outfile: resolve(outDir, 'docx-editor.js'), minify: false });
-await build({ ...common, outfile: resolve(outDir, 'docx-editor.min.js'), minify: true });
+// 1) Vendor deps bundle -> window.docxeditordeps
+await build({
+  ...common,
+  entryPoints: [depsEntry],
+  banner: depsBanner,
+  outfile: resolve(outDir, 'docx-editor-deps.js'),
+  minify: false,
+});
+await build({
+  ...common,
+  entryPoints: [depsEntry],
+  banner: depsBanner,
+  outfile: resolve(outDir, 'docx-editor-deps.min.js'),
+  minify: true,
+});
 
-console.log('docx-editor bundled -> Tesserae.DocxEditor/assets/js/docx-editor.js (+ .min.js)');
+// 2) Main editor bundle -> window.docxeditor (vendor libs externalized to the globals)
+await build({
+  ...common,
+  entryPoints: [entry],
+  globalName: 'docxeditor',
+  banner,
+  plugins: [vendorGlobalsPlugin],
+  outfile: resolve(outDir, 'docx-editor.js'),
+  minify: false,
+});
+await build({
+  ...common,
+  entryPoints: [entry],
+  globalName: 'docxeditor',
+  banner,
+  plugins: [vendorGlobalsPlugin],
+  outfile: resolve(outDir, 'docx-editor.min.js'),
+  minify: true,
+});
+
+console.log('docx-editor bundled -> assets/js/docx-editor-deps.js + docx-editor.js (+ .min.js)');
